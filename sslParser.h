@@ -1,10 +1,14 @@
-#include <pcap.h>
+#ifndef HEADER_SSLPARSER_H
+#define HEADER_SSLPARSER_H
 
-const int ERR_OK = 0;
-const int ERR_INPUT_DEVICE = 1;
-const int ERR_WRONG_INPUT_DEVICE =2;
-const int ERR_OPEN_LIVE = 3;
-const int ERR_OPEN_FILE = 4;
+#define ERR_OK ""
+#define ERR_INPUT_DEVICE "Can`t open input device."
+#define ERR_WRONG_INPUT_DEVICE "Your network interface can`t be use."
+#define ERR_OPEN_LIVE "pcap_open_live() failed."
+#define ERR_OPEN_FILE "Can`t open file for reading."
+#define ERR_PCAP_LOOP "pcap_loop() failed"
 
-int getHandlerOnline(char* interfaseName, pcap_t** handler);
-int getHandlerOffline(char* fileName, pcap_t** handler);
+char* getHandlerOnline(char* interfaseName);
+char* getHandlerOffline(char* fileName);
+
+#endif

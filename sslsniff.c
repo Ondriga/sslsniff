@@ -11,7 +11,9 @@
 #include <stdlib.h>
 #include <limits.h>
 
-void error_behavior(char* error_message){
+#include "sslParser.h"
+
+void error_behavior(const char* error_message){
 	fprintf(stderr, "%s\n", error_message);
 	exit(1);
 }
@@ -36,13 +38,22 @@ int main( int argc, char* argv[] )
 		error_behavior("Project can be run only with one argument.");
 	}
 	if(!strcmp(argv[1], "-r")){
-		if(!strcmp(argv[2], "")){
+		if(strlen(argv[2]) == 0){
 			error_behavior("After argument -r must be name of pcapng file.");
-		}		
+		}
+		char* error_message;
+		error_message = getHandlerOffline(argv[2]);
+		if(strlen(error_message) != 0){
+			error_behavior(error_message);
+		}
 	}else if(!strcmp(argv[1], "-i")){
-		int i;
-		if(!strcmp(argv[2], "")){
+		if(strlen(argv[2]) == 0){
 			error_behavior("Network interface can`t be empty string.");
+		}
+		char* error_message;
+		error_message = getHandlerOnline(argv[2]);
+		if(strlen(error_message) != 0){
+			error_behavior(error_message);
 		}
 	}else{
 		error_behavior("Wrong type of argument, there can be \"-r\" or \"-i\".");
