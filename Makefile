@@ -1,7 +1,7 @@
 CC=gcc
 CFLAGS=-lm -lpcap
-DEPS = sslParser.h
-OBJ = sslsniff.o sslParser.o
+DEPS = sslParser.h my_ssl.h
+OBJ = sslsniff.o sslParser.o my_ssl.o
 
 %.o: %.c $(DEPS)
 	$(CC) $(CFLAGS) -c -o $@ $<
