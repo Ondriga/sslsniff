@@ -1,4 +1,5 @@
 #include "sslParser.h"
+#include "my_ssl.h"
 #include <string.h>
 
 #include <pcap.h>
@@ -7,7 +8,7 @@
 #include <pcap/pcap.h>
 #include <errno.h>
 #include <sys/socket.h>
-#define __FAVOR_BSD          // important for tcphdr structure
+#define __FAVOR_BSD // important for tcphdr structure
 #include <netinet/in.h>
 #include <netinet/ip.h>
 #include <netinet/tcp.h>
@@ -16,15 +17,17 @@
 #include <netinet/if_ether.h> 
 #include <err.h>
 
-#ifdef __linux__            // for Linux
+#ifdef __linux__ // for Linux
 #include <netinet/ether.h> 
 #include <time.h>
 #include <pcap/pcap.h>
 #endif
 
-#define SIZE_ETHERNET (14)       // offset of Ethernet header to L3 protocol
+#define SIZE_ETHERNET 14 //offset of Ethernet header to L3 protocol
+#define JUMP_SSL_HEADER_IPv4 54 //skip to the ssl header if comunication using IPv4
+#define JUMP_SSL_HEADER_IPv6 86 //skip to the ssl header if comunication using IPv6
 
-void tcp_handler(struct tcphdr *my_tcp){
+void tcp_handler(struct tcphdr *my_tcp, const u_char *packet){
     printf("\tSrc port = %d, dst port = %d, seq = %u",ntohs(my_tcp->th_sport), ntohs(my_tcp->th_dport), ntohl(my_tcp->th_seq));
 
     if (my_tcp->th_flags & TH_SYN)
@@ -49,7 +52,7 @@ void mypcap_handler(u_char *args, const struct pcap_pkthdr *header, const u_char
     my_ip = (struct ip*) (packet+SIZE_ETHERNET);        // skip Ethernet header
     size_ip = my_ip->ip_hl*4;                           // length of IP header
     
-    switch (ntohs(eptr->ether_type)){               // see /usr/include/net/ethernet.h for types
+    switch (ntohs(eptr->ether_type)){
         case ETHERTYPE_IP: // IPv4 packet
 
             //TODO  printf("\tEthernet type is  0x%x, i.e. IP packet \n", ntohs(eptr->ether_type));           
@@ -61,7 +64,13 @@ void mypcap_handler(u_char *args, const struct pcap_pkthdr *header, const u_char
 
             if(my_ip->ip_p == 6){
                 struct tcphdr *my_tcp = (struct tcphdr *) (packet+SIZE_ETHERNET+size_ip); // pointer to the TCP header
-                tcp_handler(my_tcp);
+                printf("####################################################=%d=%d\n", *(packet+SIZE_ETHERNET+size_ip+4), *(packet+SIZE_ETHERNET+size_ip+4+1)); //TODO debug
+                printf("##%d##\n", *(packet+54));
+                printf("##%d##\n", *(packet+54+3));
+                printf("##%d##\n", ((*(packet+54+3))+(*(packet+54+4))));
+                short length = htons(*(packet+54+3));
+                printf("length = %d\n\n", length);
+                tcp_handler(my_tcp, packet);
             }
             break;
         
@@ -70,7 +79,7 @@ void mypcap_handler(u_char *args, const struct pcap_pkthdr *header, const u_char
 
             if(my_ip->ip_p == 6){
                 struct tcphdr *my_tcp = (struct tcphdr *) (packet+SIZE_ETHERNET+size_ip); // pointer to the TCP header
-                tcp_handler(my_tcp);
+                tcp_handler(my_tcp, packet);
             }
             break;
         default:
@@ -79,6 +88,7 @@ void mypcap_handler(u_char *args, const struct pcap_pkthdr *header, const u_char
 }
 
 char* getHandlerOnline(char* interfaceName){
+    ssl_con* ssl_list = NULL;
     pcap_t* handler;
     pcap_if_t* alldev;
     char* errbuf;
@@ -95,6 +105,7 @@ char* getHandlerOnline(char* interfaceName){
                 }
                 pcap_close(handler);
                 pcap_freealldevs(alldev);
+                ssl_destructor(ssl_list);
                 return ERR_OK;
             }
         }
@@ -104,6 +115,7 @@ char* getHandlerOnline(char* interfaceName){
 }
 
 char* getHandlerOffline(char* fileName){
+    ssl_con* ssl_list = NULL;
     pcap_t* handler;
     char* errbuf;
     if((handler = pcap_open_offline(fileName, errbuf)) == NULL){
@@ -113,6 +125,7 @@ char* getHandlerOffline(char* fileName){
         return ERR_PCAP_LOOP;
     }
     pcap_close(handler);
+    ssl_destructor(ssl_list);
     return ERR_OK;
 }
 

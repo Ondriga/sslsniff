@@ -8,7 +8,7 @@
 #define ERR_OPEN_FILE "Can`t open file for reading."
 #define ERR_PCAP_LOOP "pcap_loop() failed"
 
-char* getHandlerOnline(char* interfaseName);
+char* getHandlerOnline(char* interfaceName);
 char* getHandlerOffline(char* fileName);
 
 #endif

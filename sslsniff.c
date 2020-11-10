@@ -12,6 +12,7 @@
 #include <limits.h>
 
 #include "sslParser.h"
+#include "my_ssl.h"
 
 void error_behavior(const char* error_message){
 	fprintf(stderr, "%s\n", error_message);
@@ -34,6 +35,8 @@ void error_behavior(const char* error_message){
 
 int main( int argc, char* argv[] )
 {
+
+
 	if(argc != 3){
 		error_behavior("Project can be run only with one argument.");
 	}
