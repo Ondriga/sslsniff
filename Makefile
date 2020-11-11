@@ -1,5 +1,5 @@
 CC=gcc
-CFLAGS=-lm -lpcap
+CFLAGS=-lm -lpcap -g
 DEPS = sslParser.h my_ssl.h
 OBJ = sslsniff.o sslParser.o my_ssl.o
 
