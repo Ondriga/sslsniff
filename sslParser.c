@@ -25,6 +25,28 @@
 
 #define SIZE_ETHERNET 14 //offset of Ethernet header to L3 protocol
 
+int read_2_byte(const u_char* number_location){
+    return htons(*number_location) + (*(number_location+1));
+}
+
+bool load_sni(ssl_con* ssl_con_p, const u_char* ssl_content){
+    int tmp = 37;   //Tmp contain number of bytes before attribute session ID length.
+    tmp += *(ssl_content+tmp);
+    tmp += 1;  //Tmp contain number of bytes before attribute cipher suites length.
+    tmp += read_2_byte(ssl_content+tmp);
+    tmp += 2;   //Tmp contain number of bytes before attribute compression methods length.
+    tmp += *(ssl_content+tmp);
+    tmp += 10;   //Tmp contain number of bytes before server name length.
+    int name_length = read_2_byte(ssl_content+tmp);
+    tmp += 2;   //Tmp contain number of bytes before server name.
+    char server_name[name_length+1];
+    for(int i=0; i<name_length; i++){
+        server_name[i] = *(ssl_content+tmp+i);
+    }
+    server_name[name_length] = '\0';
+    return ssl_addSNI(ssl_con_p, server_name);
+}
+
 bool comp_device(char* ip1, int port1, char* ip2, int port2){
     return (strcmp(ip1, ip2) == 0 && port1 == port2);
 }
@@ -55,20 +77,6 @@ char* tcp_handler(struct tcphdr *my_tcp, char* timestamp, struct tm* time, char*
     int dest_PORT = ntohs(my_tcp->th_dport);
     ssl_con* ssl_con_p = NULL;
 
-//TODO debug
-if (my_tcp->th_flags & TH_SYN)
-	printf(", SYN");
-      if (my_tcp->th_flags & TH_FIN)
-	printf(", FIN");
-      if (my_tcp->th_flags & TH_RST)
-	printf(", RST");
-      if (my_tcp->th_flags & TH_PUSH)
-	printf(", PUSH");
-      if (my_tcp->th_flags & TH_ACK)
-	printf(", ACK");
-      printf("\n");
-
-
     if((my_tcp->th_flags & TH_SYN) && !(my_tcp->th_flags & TH_ACK)){
         ssl_con* tmp = ssl_constructor(timestamp, src_IP, src_PORT, dest_IP, dest_PORT, mktime(time));
         if(tmp == NULL){
@@ -84,35 +92,42 @@ if (my_tcp->th_flags & TH_SYN)
     if((my_tcp->th_flags & TH_PUSH) && (my_tcp->th_flags & TH_ACK)){
         ssl_con_p = find_ssl(*ssl_list, src_IP, src_PORT, dest_IP, dest_PORT);
         int ssl_bytes;
-        u_char* tmp = ssl_header;
+        const u_char* tmp = ssl_header;
         
         if(ssl_con_p != NULL){
             switch(*ssl_header){
+                case 22:
+                    if(*(ssl_header+5) == 1){   //If it is Client Hello.
+                        if(!load_sni(ssl_con_p, ssl_header+6)){
+                            return ERR_MALLOC;
+                        }                   
+                    }
                 case 20:
                 case 21:
-                case 22:
                 case 23:
                     ssl_con_p->packets++;
                     ssl_bytes = htons(*(ssl_header+3)) + (*(ssl_header+4));
                     ssl_con_p->bytes += ssl_bytes;
                     tmp += ssl_bytes + 5;
-                    printf("1. TOTO JE TEST, CO JE NA KONCI: %d\n", *tmp); //TODO debug
+                    // TODO mozno s tym bude problem
                     while (20 <= *tmp && *tmp <= 23){
-                        printf("PRECHADZANIE CEZ TLS SPRAVY\n"); //TODO debug
                         ssl_bytes = htons(*(tmp+3)) + (*(tmp+4));
                         ssl_con_p->bytes += ssl_bytes;
                         tmp += ssl_bytes + 5;
-                        printf("2. TOTO JE TEST, CO JE NA KONCI: %d\n", *tmp); //TODO debug
                     }
                     break;
                 default:
                     break;
-                    //ssl_destructor(ssl_list, ssl_con_p);
+                    printf("NICENIE STOP\n"); //TODO debug
+                    ssl_destructor(ssl_list, ssl_con_p);
             }
         }
     }
     if(my_tcp->th_flags & TH_FIN){
         ssl_con_p = find_ssl(*ssl_list, src_IP, src_PORT, dest_IP, dest_PORT);
+        if(ssl_con_p->server_PORT != src_PORT){ //Check if it is second FIN.
+            return ERR_OK;
+        }
         if(ssl_con_p != NULL){
             if(ssl_con_p->sni != NULL){
                 printf("%s,", ssl_con_p->timestamp);
