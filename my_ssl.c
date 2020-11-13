@@ -87,6 +87,6 @@ bool ssl_addSNI(ssl_con* ssl_con_p, char* sni){
     if(ssl_con_p->sni == NULL){
         return false;
     }
-    ssl_con_p->sni = sni;
+    strcpy(ssl_con_p->sni, sni);
     return true;
 }

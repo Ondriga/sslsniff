@@ -3,8 +3,6 @@
 
 #include <stdbool.h>
 
-#define SSL_LENGTH = 3;
-
 typedef struct ssl_connection{
     char* timestamp;
     char* client_IP;
