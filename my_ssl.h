@@ -12,11 +12,11 @@ typedef struct ssl_connection{
     char* sni;
     int bytes;
     int packets;
-    int duration_sec;
+    double duration_sec;
     struct ssl_connection* next;
 }ssl_con;
 
-ssl_con* ssl_constructor(char* timestamp, char* client_IP, int client_PORT, char* server_IP, int server_PORT, int duration_sec);
+ssl_con* ssl_constructor(char* timestamp, char* client_IP, int client_PORT, char* server_IP, int server_PORT, double duration_sec);
 void ssl_addOnEnd(ssl_con* ssl_con_p, ssl_con* new_ssl);
 void ssl_destructor_all(ssl_con* ssl_con_p);
 void ssl_destructor(ssl_con** ssl_con_p, ssl_con* destroyMe);

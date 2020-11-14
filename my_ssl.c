@@ -2,7 +2,7 @@
 #include <stdlib.h>
 #include <string.h>
 
-ssl_con* ssl_constructor(char* timestamp, char* client_IP, int client_PORT, char* server_IP, int server_PORT, int duration_sec){
+ssl_con* ssl_constructor(char* timestamp, char* client_IP, int client_PORT, char* server_IP, int server_PORT, double duration_sec){
     ssl_con* ssl_con_p = (ssl_con*) malloc(sizeof(ssl_con));
     if(ssl_con_p == NULL){
         return NULL;
