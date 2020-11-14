@@ -72,13 +72,13 @@ ssl_con* find_ssl(ssl_con* ssl_list, char* src_IP, int src_PORT, char* dest_IP, 
     return NULL;
 }
 
-char* tcp_handler(struct tcphdr *my_tcp, char* timestamp, struct tm* time, char* src_IP, char* dest_IP, const u_char* ssl_header, ssl_con** ssl_list){
+char* tcp_handler(struct tcphdr *my_tcp, char* timestamp, double time, char* src_IP, char* dest_IP, const u_char* ssl_header, ssl_con** ssl_list){
     int src_PORT = ntohs(my_tcp->th_sport);
     int dest_PORT = ntohs(my_tcp->th_dport);
     ssl_con* ssl_con_p = NULL;
 
     if((my_tcp->th_flags & TH_SYN) && !(my_tcp->th_flags & TH_ACK)){
-        ssl_con* tmp = ssl_constructor(timestamp, src_IP, src_PORT, dest_IP, dest_PORT, mktime(time));
+        ssl_con* tmp = ssl_constructor(timestamp, src_IP, src_PORT, dest_IP, dest_PORT, time);
         if(tmp == NULL){
             return ERR_MALLOC;
         }
@@ -105,30 +105,29 @@ char* tcp_handler(struct tcphdr *my_tcp, char* timestamp, struct tm* time, char*
                 case 20:
                 case 21:
                 case 23:
-                    ssl_con_p->packets++;
                     ssl_bytes = htons(*(ssl_header+3)) + (*(ssl_header+4));
                     ssl_con_p->bytes += ssl_bytes;
                     tmp += ssl_bytes + 5;
                     // TODO mozno s tym bude problem
                     while (20 <= *tmp && *tmp <= 23){
-                        ssl_bytes = htons(*(tmp+3)) + (*(tmp+4));
+                        ssl_bytes = read_2_byte(tmp+3);
                         ssl_con_p->bytes += ssl_bytes;
                         tmp += ssl_bytes + 5;
                     }
                     break;
                 default:
                     break;
-                    printf("NICENIE STOP\n"); //TODO debug
                     ssl_destructor(ssl_list, ssl_con_p);
             }
         }
     }
     if(my_tcp->th_flags & TH_FIN){
         ssl_con_p = find_ssl(*ssl_list, src_IP, src_PORT, dest_IP, dest_PORT);
-        if(ssl_con_p->server_PORT != src_PORT){ //Check if it is second FIN.
-            return ERR_OK;
-        }
         if(ssl_con_p != NULL){
+            ssl_con_p->packets++;
+            if(ssl_con_p->server_PORT != src_PORT){ //Check if it is second FIN.
+                return ERR_OK;
+            }
             if(ssl_con_p->sni != NULL){
                 printf("%s,", ssl_con_p->timestamp);
                 printf("%s,", ssl_con_p->client_IP);
@@ -137,12 +136,17 @@ char* tcp_handler(struct tcphdr *my_tcp, char* timestamp, struct tm* time, char*
                 printf("%s,", ssl_con_p->sni);
                 printf("%d,", ssl_con_p->bytes);
                 printf("%d,", ssl_con_p->packets);
-                printf("%d", (mktime(time) - ssl_con_p->duration_sec));
+                printf("%f", (time - ssl_con_p->duration_sec));
                 printf("\n");
             }
             ssl_destructor(ssl_list, ssl_con_p);
         }
     }
+    ssl_con_p = find_ssl(*ssl_list, src_IP, src_PORT, dest_IP, dest_PORT);
+    if(ssl_con_p != NULL){
+        ssl_con_p->packets++;
+    }
+    
     return ERR_OK;
 }
 
@@ -165,6 +169,8 @@ char* mypcap_handler(const struct pcap_pkthdr header, const u_char *packet, ssl_
     strftime(tmp, 30, "%Y-%m-%d %H:%M:%S", time);
     snprintf(timestamp, 30, "%s.%06ld", tmp, header.ts.tv_usec);
 
+    double seconds = mktime(time) + header.ts.tv_usec/1000000.0;
+
     my_ip = (struct ip*) (packet+SIZE_ETHERNET);        // skip Ethernet header
     size_ip = my_ip->ip_hl*4;                           // length of IP header
 
@@ -181,11 +187,21 @@ char* mypcap_handler(const struct pcap_pkthdr header, const u_char *packet, ssl_
             if(my_ip->ip_p == 6){
                 size_TCP = (*(tcp_header+12) & 0xf0) >> 2;
                 ssl_header = tcp_header + size_TCP;       
-                return tcp_handler(my_tcp, timestamp, time, src_IP, dest_IP, ssl_header, ssl_list);
+                return tcp_handler(my_tcp, timestamp, seconds, src_IP, dest_IP, ssl_header, ssl_list);
             }
             break;
         
         case ETHERTYPE_IPV6:  // IPv6 packet
+            /*ipv6_header = packet+SIZE_ETHERNET;
+            tcp_header = packet+SIZE_ETHERNET+size_ip;
+            my_tcp = (struct tcphdr *) tcp_header;
+
+            if(my_ip->ip_p == 6){
+                size_TCP = (*(tcp_header+12) & 0xf0) >> 2;
+                ssl_header = tcp_header + size_TCP;       
+                return tcp_handler(my_tcp, timestamp, seconds, src_IP, dest_IP, ssl_header, ssl_list);
+            }*/
+
             /*TODO treba dorobit
 
             //TODO  printf("\tEthernet type is 0x%x, i.e., IPv6 packet\n",ntohs(eptr->ether_type));
@@ -277,9 +293,3 @@ char* getHandlerOffline(char* fileName){
     ssl_destructor_all(ssl_list);
     return ERR_OK;
 }
-
-/* TODO ulozene pre neskorsie pouzitie (timestamp)
-time = localtime(&header.ts.tv_sec);
-    strftime(buff1, 30, "%Y-%m-%d %H:%M:%S", time);
-    snprintf(buff2, 30, "%s.%06ld", buff1, header.ts.tv_usec);
-*/
