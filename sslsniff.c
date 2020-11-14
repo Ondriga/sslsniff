@@ -19,24 +19,8 @@ void error_behavior(const char* error_message){
 	exit(1);
 }
 
-// TODO odstran to ak to nebudes potrebovat
-/*bool string2int(char* string, int* number){
-	if(!strcmp(string, "")){
-		return false;
-	}
-	char* end;
-	long int inputNum = strtol(string, &end, 10);
-	if(inputNum == LONG_MAX || inputNum == LONG_MIN || strcmp(end, "")){
-		return false;
-	}
-	*number = inputNum;
-	return true;
-}*/
-
 int main( int argc, char* argv[] )
 {
-
-
 	if(argc != 3){
 		error_behavior("Project can be run only with one argument.");
 	}
@@ -44,6 +28,11 @@ int main( int argc, char* argv[] )
 		if(strlen(argv[2]) == 0){
 			error_behavior("After argument -r must be name of pcapng file.");
 		}
+		FILE* file = fopen(argv[2], "r");
+		if(file == NULL){
+			error_behavior("File isn`t exist or can`t be read.");
+		}
+		fclose(file);
 		char* error_message;
 		error_message = getHandlerOffline(argv[2]);
 		if(strlen(error_message) != 0){
