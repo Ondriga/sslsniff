@@ -80,10 +80,20 @@ ssl_con* find_ssl(ssl_con* ssl_list, char* src_IP, int src_PORT, char* dest_IP, 
     return NULL;
 }
 
-char* tcp_handler(const u_char* tcp_header, char* timestamp, double time, char* src_IP, char* dest_IP, ssl_con** ssl_list, int data_length){
+bool is_tls(const u_char* header){
+    if(20 <= *header && *header <= 23){
+        if(*(header+1) == 3){
+            if(1 <= *(header+2) && *(header+2) <= 4){
+                return true;
+            }
+        }
+    }
+    return false;
+}
+
+char* tcp_handler(const u_char* tcp_header, char* timestamp, double time, char* src_IP, char* dest_IP, ssl_con** ssl_list){
     struct tcphdr *my_tcp = (struct tcphdr *) tcp_header;
     int size_TCP = (*(tcp_header+12) & 0xf0) >> 2; //size of TCP header
-    int payload_TCP = data_length-size_TCP;
     const u_char* ssl_header = tcp_header + size_TCP;
 
     int src_PORT = ntohs(my_tcp->th_sport);
@@ -101,37 +111,7 @@ char* tcp_handler(const u_char* tcp_header, char* timestamp, double time, char* 
             ssl_addOnEnd(*ssl_list, tmp);
         }
         
-    }
-    if((my_tcp->th_flags & TH_PUSH) && (my_tcp->th_flags & TH_ACK)){
-        ssl_con_p = find_ssl(*ssl_list, src_IP, src_PORT, dest_IP, dest_PORT);
-        int ssl_bytes;
-        const u_char* tmp = ssl_header;
-        int all_ssl_bytes = 0;
-        
-        if(ssl_con_p != NULL){
-            switch(*ssl_header){
-                case 22:
-                    if(*(ssl_header+SIZE_TLS) == 1){   //If it is Client Hello.
-                        if(!load_sni(ssl_con_p, ssl_header+6)){
-                            return ERR_MALLOC;
-                        }                   
-                    }
-                case 20:
-                case 21:
-                case 23:
-                    for(const u_char* tmp = ssl_header; all_ssl_bytes < payload_TCP; tmp += (ssl_bytes+SIZE_TLS)){
-                        ssl_bytes = read_2_byte(tmp+3);
-                        ssl_con_p->bytes += ssl_bytes;
-                        all_ssl_bytes += ssl_bytes+SIZE_TLS;
-                    }
-                    break;
-                default:
-                    break;
-                    ssl_destructor(ssl_list, ssl_con_p);
-            }
-        }
-    }
-    if(my_tcp->th_flags & TH_FIN){
+    }else if(my_tcp->th_flags & TH_FIN){
         ssl_con_p = find_ssl(*ssl_list, src_IP, src_PORT, dest_IP, dest_PORT);
         if(ssl_con_p != NULL){
             ssl_con_p->packets++;
@@ -151,10 +131,29 @@ char* tcp_handler(const u_char* tcp_header, char* timestamp, double time, char* 
             }
             ssl_destructor(ssl_list, ssl_con_p);
         }
-    }else{//TODO check forum
+    }else{
         ssl_con_p = find_ssl(*ssl_list, src_IP, src_PORT, dest_IP, dest_PORT);
         if(ssl_con_p != NULL){
-            
+            ssl_con_p->packets++;
+            int ssl_bytes;
+            switch(*ssl_header){
+                case 22:
+                    if(*(ssl_header+SIZE_TLS) == 1){   //If it is Client Hello.
+                        if(!load_sni(ssl_con_p, ssl_header+6)){
+                            return ERR_MALLOC;
+                        }                   
+                    }
+                case 20:
+                case 21:
+                case 23:
+                    for(const u_char* tmp = ssl_header; is_tls(tmp); tmp += (ssl_bytes+SIZE_TLS)){
+                        ssl_bytes = read_2_byte(tmp+3);
+                        ssl_con_p->bytes += ssl_bytes;
+                    }
+                    break;
+                default:
+                    break;
+            }
         }
     }    
     return ERR_OK;
@@ -162,7 +161,6 @@ char* tcp_handler(const u_char* tcp_header, char* timestamp, double time, char* 
 
 char* mypcap_handler(const struct pcap_pkthdr header, const u_char *packet, ssl_con** ssl_list){
     struct ether_header *eptr = (struct ether_header *) packet; // pointer to the beginning of Ethernet header
-    int data_length = header.caplen - SIZE_ETHERNET;
     char tmp[30];
     char timestamp[30];
     struct tm* time = localtime(&header.ts.tv_sec);
@@ -182,7 +180,7 @@ char* mypcap_handler(const struct pcap_pkthdr header, const u_char *packet, ssl_
             strcpy(src_IP, inet_ntoa(ipv4_header->ip_src));
             strcpy(dest_IP, inet_ntoa(ipv4_header->ip_dst));
        
-            return tcp_handler(tcp_header, timestamp, seconds, src_IP, dest_IP, ssl_list, data_length-size_ip);
+            return tcp_handler(tcp_header, timestamp, seconds, src_IP, dest_IP, ssl_list);
         }
     }else if(ntohs(eptr->ether_type) == ETHERTYPE_IPV6){  // IPv6 packet
         const u_char* ipv6_header = packet+SIZE_ETHERNET; // pointer to the beginning of IPv6 header
@@ -194,7 +192,7 @@ char* mypcap_handler(const struct pcap_pkthdr header, const u_char *packet, ssl_
             inet_ntop(AF_INET6, ipv6_header+8, src_IP, INET6_ADDRSTRLEN);
             inet_ntop(AF_INET6, ipv6_header+24, dest_IP, INET6_ADDRSTRLEN);
 
-            return tcp_handler(tcp_header, timestamp, seconds, src_IP, dest_IP, ssl_list, data_length-SIZE_IPv6);
+            return tcp_handler(tcp_header, timestamp, seconds, src_IP, dest_IP, ssl_list);
         }
     }
     return ERR_OK;
