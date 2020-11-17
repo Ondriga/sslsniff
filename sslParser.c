@@ -31,7 +31,7 @@ int read_2_byte(const u_char* number_location){
     return htons(*number_location) + (*(number_location+1));
 }
 
-bool load_sni(ssl_con* ssl_con_p, const u_char* ssl_content){
+bool load_sni(ssl_con* ssl_con_p, const u_char* ssl_content, int bytes){
     int tmp = 37;   //Tmp contain number of bytes before attribute session ID length.
     tmp += *(ssl_content+tmp);
     tmp += 1;  //Tmp contain number of bytes before attribute cipher suites length.
@@ -43,6 +43,9 @@ bool load_sni(ssl_con* ssl_con_p, const u_char* ssl_content){
         tmp += 2;   //Tmp contain number of bytes before extension length.
         tmp += read_2_byte(ssl_content+tmp);
         tmp += 2;   //Tmp contain number of bytes before nest extension.
+        if(tmp >= bytes){
+            return ssl_addSNI(ssl_con_p, "");
+        }
     }
     tmp += 7;   //Tmp contain number of bytes before server name length.
     int name_length = read_2_byte(ssl_content+tmp);
@@ -91,6 +94,21 @@ bool is_tls(const u_char* header){
     return false;
 }
 
+void print_ssl(ssl_con* ssl_con_p, ssl_con** ssl_list, double time){
+    if(ssl_con_p->client_hello && ssl_con_p->server_hello){
+        printf("%s,", ssl_con_p->timestamp);
+        printf("%s,", ssl_con_p->client_IP);
+        printf("%d,", ssl_con_p->client_PORT);
+        printf("%s,", ssl_con_p->server_IP);
+        printf("%s,", ssl_con_p->sni);
+        printf("%d,", ssl_con_p->bytes);
+        printf("%d,", ssl_con_p->packets);
+        printf("%f", (time - ssl_con_p->duration_sec));
+        printf("\n");
+    }
+    ssl_destructor(ssl_list, ssl_con_p);
+}
+
 char* tcp_handler(const u_char* tcp_header, char* timestamp, double time, char* src_IP, char* dest_IP, ssl_con** ssl_list, int payload){
     struct tcphdr *my_tcp = (struct tcphdr *) tcp_header;
     int size_TCP = (*(tcp_header+12) & 0xf0) >> 2; //size of TCP header
@@ -112,42 +130,48 @@ char* tcp_handler(const u_char* tcp_header, char* timestamp, double time, char* 
             ssl_addOnEnd(*ssl_list, tmp);
         }
         
-    }else if(my_tcp->th_flags & TH_FIN){
-        ssl_con_p = find_ssl(*ssl_list, src_IP, src_PORT, dest_IP, dest_PORT);
-        if(ssl_con_p != NULL){
-            ssl_con_p->packets++;
-            if(ssl_con_p->server_PORT != src_PORT){ //Check if it is second FIN.
-                return ERR_OK;
-            }
-            if(ssl_con_p->sni != NULL){
-                printf("%s,", ssl_con_p->timestamp);
-                printf("%s,", ssl_con_p->client_IP);
-                printf("%d,", ssl_con_p->client_PORT);
-                printf("%s,", ssl_con_p->server_IP);
-                printf("%s,", ssl_con_p->sni);
-                printf("%d,", ssl_con_p->bytes);
-                printf("%d,", ssl_con_p->packets);
-                printf("%f", (time - ssl_con_p->duration_sec));
-                printf("\n");
-            }
-            ssl_destructor(ssl_list, ssl_con_p);
-        }
-    }else{
-        ssl_con_p = find_ssl(*ssl_list, src_IP, src_PORT, dest_IP, dest_PORT);
-        if(ssl_con_p != NULL){
-            ssl_con_p->packets++;
-            for(int offset=0; offset<payload-4; offset++){
-                if(is_tls(ssl_header+offset)){
-                    ssl_con_p->bytes += read_2_byte(ssl_header+offset+3);
-                    if(*(ssl_header+offset) == 22 && *(ssl_header+offset+SIZE_TLS) == 1){
-                        if(!load_sni(ssl_con_p, ssl_header+offset+6)){
-                            return ERR_MALLOC;
+    }
+    
+    ssl_con_p = find_ssl(*ssl_list, src_IP, src_PORT, dest_IP, dest_PORT);
+    if(ssl_con_p != NULL){
+        ssl_con_p->packets++;
+        for(int offset=0; offset<payload-4; offset++){
+            if(is_tls(ssl_header+offset)){
+                int ssl_bytes = read_2_byte(ssl_header+offset+3);
+                ssl_con_p->bytes += ssl_bytes;
+                if(*(ssl_header+offset) == 22){
+                    if(*(ssl_header+offset+SIZE_TLS) == 1){
+                        ssl_con_p->client_hello = true;
+                        if(ssl_con_p->sni == NULL){
+                            if(!load_sni(ssl_con_p, ssl_header+offset+6, ssl_bytes-6)){
+                                return ERR_MALLOC;
+                            }
                         }
+                    }else if(*(ssl_header+offset+SIZE_TLS) == 2){
+                        ssl_con_p->server_hello = true;
                     }
                 }
+                offset += SIZE_TLS+ssl_bytes-1;
             }
         }
-    }    
+    }
+    
+    if(my_tcp->th_flags & TH_FIN){
+        ssl_con_p = find_ssl(*ssl_list, src_IP, src_PORT, dest_IP, dest_PORT);
+        if(ssl_con_p != NULL){
+            if(ssl_con_p->fin_PORT == 0 || ssl_con_p->fin_PORT == src_PORT){ //Check if it is second FIN.
+                ssl_con_p->fin_PORT = src_PORT;
+                return ERR_OK;
+            }
+            print_ssl(ssl_con_p, ssl_list, time);
+        }
+    }
+    if(my_tcp->th_flags & TH_RST){
+        ssl_con_p = find_ssl(*ssl_list, src_IP, src_PORT, dest_IP, dest_PORT);
+        if(ssl_con_p != NULL){
+            print_ssl(ssl_con_p, ssl_list, time);
+        }
+    }   
     return ERR_OK;
 }
 
