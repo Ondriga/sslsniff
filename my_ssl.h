@@ -13,6 +13,9 @@ typedef struct ssl_connection{
     int bytes;
     int packets;
     double duration_sec;
+    bool client_hello;
+    bool server_hello;
+    int fin_PORT;
     struct ssl_connection* next;
 }ssl_con;
 

@@ -31,8 +31,11 @@ ssl_con* ssl_constructor(char* timestamp, char* client_IP, int client_PORT, char
     ssl_con_p->server_PORT = server_PORT;
     ssl_con_p->sni = NULL;
     ssl_con_p->bytes = 0;
-    ssl_con_p->packets = 1;
+    ssl_con_p->packets = 0;
     ssl_con_p->duration_sec = duration_sec;
+    ssl_con_p->client_hello = false;
+    ssl_con_p->server_hello = false;
+    ssl_con_p->fin_PORT = 0;
     ssl_con_p->next = NULL;
     return ssl_con_p;
 }
