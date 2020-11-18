@@ -1,3 +1,10 @@
+/*
+ * Source code for ISA project.
+ * file: my_ssl.c
+ * 
+ * (C) Patrik Ondriga (xondri08) 
+ */
+
 #include "my_ssl.h"
 #include <stdlib.h>
 #include <string.h>

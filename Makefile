@@ -1,3 +1,8 @@
+# Source code for ISA project.
+# file: Makefile
+# 
+# (C) Patrik Ondriga (xondri08) 
+
 CC=gcc
 CFLAGS=-lm -lpcap -g
 DEPS = sslParser.h my_ssl.h
