@@ -25,8 +25,17 @@ void error_behavior(const char* error_message){
 
 int main( int argc, char* argv[] )
 {
+	if(argc == 2){
+		if(!strcmp(argv[1], "--help")){
+			printf("This program providing ssl sniffing from file or online from interface.\n");
+			printf("You can choose source of packets by run program with these arguments:\n");
+			printf("		-i [interface name]\n");
+			printf("		-r [pcapng file name]\n");
+			return 0;
+		}
+	}
 	if(argc != 3){
-		error_behavior("Project can be run only with one argument.");
+		error_behavior("Project can be run only with one argument. For help add argument \"--help\"");
 	}
 	if(!strcmp(argv[1], "-r")){		//Program start with argument -r.
 		if(strlen(argv[2]) == 0){	//Check if argument have value.
@@ -51,6 +60,6 @@ int main( int argc, char* argv[] )
 			error_behavior(error_message);
 		}
 	}else{
-		error_behavior("Wrong type of argument, there can be \"-r\" or \"-i\".");
+		error_behavior("Wrong type of argument, there can be \"-r\", \"-i\" or \"--help\".");
 	}
 }
